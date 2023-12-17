@@ -51,9 +51,10 @@ from nio import (
     RoomMessage,
     RoomMessageFormatted,
     RoomMessageMedia,
+    RoomMessagesError,
     crypto,
+    exceptions,
     store,
-    exceptions
 )
 from functools import partial
 from typing import Union, TextIO
@@ -310,11 +311,26 @@ async def fetch_room_events(
 
 
 async def write_room_events(client, room):
-    print(f"Fetching {room.room_id} room messages and writing to disk...")
-    sync_resp = await client.sync(
-        full_state=True, sync_filter={"room": {"timeline": {"limit": 1}}}
+    print(f"Fetching {room.room_id} '{room.display_name}' room messages and writing to disk...")
+
+    # Fetch the room messages directly.
+    # The previous implementation of this relied on the 'sync' endpoint, but it doesn't look like
+    # that is guaranteed to contain all rooms.
+    response = await client.room_messages(
+        room.room_id, None, limit=1, direction=MessageDirection.front
     )
-    start_token = sync_resp.rooms.join[room.room_id].timeline.prev_batch
+
+    # Check to see if the response is an error.
+    if isinstance(response, RoomMessagesError):
+        print("ERROR: Failed to enumerate room.")
+        return
+
+    # Check to see if there are any messages.
+    if response.end is None:
+        exit("Skipping seemingly empty room.")
+
+    start_token = response.end
+
     # Generally, it should only be necessary to fetch back events but,
     # sometimes depending on the sync, front events need to be fetched
     # as well.
