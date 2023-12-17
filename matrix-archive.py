@@ -63,6 +63,7 @@ import argparse
 import asyncio
 import getpass
 import itertools
+import mimetypes
 import os
 import pathvalidate
 import re
@@ -244,7 +245,8 @@ async def write_event(
         await output_file.write(serialize_event(dict(type="text", body=event.body,)))
     elif isinstance(event, (RoomMessageMedia, RoomEncryptedMedia)):
         media_data = await download_mxc(client, event.url)
-        filename = choose_filename(f"{media_dir}/{event.body}")
+        extension = mimetypes.guess_extension(event.mimetype)
+        filename = choose_filename(f"{media_dir}/{event.event_id}.{extension}")
         async with aiofiles.open(filename, "wb") as f:
             try:
                 await f.write(
@@ -342,8 +344,18 @@ async def write_room_events(client, room):
                     # download media if necessary
                     if isinstance(event, (RoomMessageMedia, RoomEncryptedMedia)):
                         media_data = await download_mxc(client, event.url)
-                        filename = choose_filename(f"{media_dir}/{event.body}")
-                        event.source["_file_path"] = filename
+
+                        # use the original filename if possible and fail over to a combination of the
+                        # event id and the mimetype if not
+                        try:
+                            basename = event.source["content"]["filename"]
+                            filename = f"{media_dir}/{event.event_id} {basename}"
+                        except KeyError:
+                            extension = mimetypes.guess_extension(event.mimetype)
+                            filename = f"{media_dir}/{event.event_id}.{extension}"
+                        
+                        event.source["_file_path"] = os.path.relpath(filename, OUTPUT_DIR)
+
                         async with aiofiles.open(filename, "wb") as f_media:
                             try:
                                 await f_media.write(
