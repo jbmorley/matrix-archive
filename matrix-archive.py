@@ -374,7 +374,7 @@ async def main() -> None:
         for room_id, room in client.rooms.items():
             # Iterate over rooms to see if a room has been selected to
             # be automatically fetched
-            if room_id in ARGS.room or any(re.match(pattern, room_id) for pattern in ARGS.roomregex):
+            if room_id in ARGS.room or any(re.match(pattern, room_id) or re.match(pattern, room.display_name) for pattern in ARGS.roomregex):
                 print(f"Selected room: {room_id}")
                 await write_room_events(client, room)
         if ARGS.batch:
